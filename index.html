@@ -75,6 +75,7 @@
 
     .collapsed .group-content { display: none; }
     .arrow { font-size: 10px; }
+    .property-hover { white-space: normal; max-width: 280px; }
   </style>
 </head>
 <body>
@@ -255,6 +256,7 @@ const groupDefs = [
       { key: 'ceja', label: 'CEJA Adjacent',  color: '#e67e22', defaultOn: false },
       { key: 'r3',   label: 'R3 Designated',  color: '#8e44ad', defaultOn: false },
       { key: 'lmi',  label: 'LMI (51%+)',     color: '#27ae60', defaultOn: false },
+      { key: 'non_eiec', label: 'Non EIEC Area', color: '#3498db', defaultOn: false },
     ]
   },
 ];
@@ -348,12 +350,38 @@ fetch('mf_prospects.geojson').then(r => r.json()).then(data => {
           ${p.TIER}<br>
           ${p.PHONE ? 'Ph: ' + p.PHONE + '<br>' : ''}
           ${p.WEBSITE ? '<a href="' + p.WEBSITE + '" target="_blank">Website</a>' : ''}`);
+        l.bindTooltip(l.getPopup().getContent(), {
+          sticky: true,
+          direction: 'top',
+          opacity: 0.95,
+          className: 'property-hover'
+        });
+        l.on('popupopen', () => l.closeTooltip());
       }
     }));
   });
 });
 
 // ── Eligibility Areas ──────────────────────────────────────
+// Keep the territory remainder below the existing thematic layers.
+map.createPane('nonEiecPane');
+map.getPane('nonEiecPane').style.zIndex = 350;
+fetch('non_eiec.geojson').then(r => {
+  if (!r.ok) throw new Error('Non EIEC Area could not be loaded');
+  return r.json();
+}).then(data => {
+  addLayer('non_eiec', L.geoJSON(data, {
+    pane: 'nonEiecPane',
+    style: polyStyle('#3498db', 0.35),
+    onEachFeature: (f, l) => l.bindPopup('<b>Non EIEC Area</b><br>Ameren territory outside the EJC, CEJA Adjacent, R3, and income-qualifying areas.')
+  }));
+}).catch(error => {
+  console.error(error);
+  const checkbox = document.getElementById('non_eiec');
+  checkbox.disabled = true;
+  document.querySelector('label[for="non_eiec"]').textContent = 'Non EIEC Area (unavailable)';
+});
+
 [
   { key: 'ejc',  file: 'ejc.geojson',  color: '#e74c3c',
     popup: p => `<b>EJC 2026</b><br>GEOID: ${p.GEOID}<br>County: ${p.County}` },
