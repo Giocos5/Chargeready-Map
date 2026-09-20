@@ -1,404 +1,306 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>ChargeReady Market Map</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; }
-    #map { height: 100vh; width: 100%; }
-
+    * { box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; margin: 0; }
+    body { font-family: Arial, sans-serif; color: #17212b; }
+    #map { background: #dce4e8; }
+    #loading {
+      position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center;
+      background: rgba(21, 32, 43, .88); color: white; font-weight: 700;
+    }
     #panel {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      z-index: 1000;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-      width: 230px;
-      max-height: 90vh;
-      overflow-y: auto;
+      position: fixed; z-index: 1200; top: 10px; right: 10px; width: 300px;
+      max-height: calc(100vh - 20px); overflow: auto; background: rgba(255,255,255,.97);
+      border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,.35);
     }
-
-    #panel-header {
-      background: #2c3e50;
-      color: white;
-      padding: 10px 12px;
-      border-radius: 8px 8px 0 0;
-      font-weight: bold;
-      font-size: 13px;
+    #panel-title {
+      position: sticky; top: 0; z-index: 2; display: flex; align-items: center;
+      justify-content: space-between; padding: 10px 12px; color: white; background: #2c3e50;
+      font-size: 14px; font-weight: 700; border-radius: 8px 8px 0 0;
     }
-
-    .group { border-bottom: 1px solid #e0e0e0; }
-
-    .group-header {
-      background: #ecf0f1;
-      padding: 7px 12px;
-      font-weight: bold;
-      font-size: 11px;
-      color: #2c3e50;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      user-select: none;
+    #collapse { border: 0; background: transparent; color: white; font-size: 18px; cursor: pointer; }
+    #layers { padding-bottom: 6px; }
+    .section-title {
+      display: flex; align-items: center; justify-content: space-between; width: 100%;
+      padding: 8px 10px; background: #e7ecef; border: 0; border-top: 1px solid #d1d8dc;
+      color: #34495e; font-size: 10px; font-weight: 800; letter-spacing: .55px;
+      text-transform: uppercase; cursor: pointer; text-align: left;
     }
-    .group-header:hover { background: #d5dbdb; }
-
-    .group-content { padding: 4px 0; }
-
-    .layer-item {
-      display: flex;
-      align-items: center;
-      padding: 4px 12px;
-      cursor: pointer;
-      font-size: 12px;
+    .section-title:hover { background: #d9e1e5; }
+    .section-body.collapsed { display: none; }
+    .layer { border-top: 1px solid #edf0f2; }
+    .layer-row { display: flex; align-items: center; min-height: 34px; padding: 5px 9px; gap: 7px; }
+    .layer-row input { width: 17px; height: 17px; flex: 0 0 auto; }
+    .layer-row label { flex: 1; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .legend-toggle { border: 0; background: transparent; color: #566573; cursor: pointer; font-size: 12px; }
+    .legend { display: none; padding: 0 12px 7px 34px; }
+    .legend.open { display: block; }
+    .legend-item { display: flex; align-items: center; gap: 7px; margin: 4px 0; font-size: 11px; }
+    .swatch { width: 13px; height: 13px; border: 1px solid rgba(0,0,0,.5); flex: 0 0 auto; }
+    .swatch.diamond { transform: rotate(45deg); width: 10px; height: 10px; margin: 2px; }
+    .swatch.hatch-red { background: repeating-linear-gradient(135deg, transparent 0 3px, #e31a1c 3px 5px); }
+    .swatch.hatch-green { background: repeating-linear-gradient(45deg, transparent 0 3px, #0bfc5f 3px 5px); }
+    .swatch.hatch-blue { background: repeating-linear-gradient(135deg, transparent 0 3px, #0000ff 3px 5px); }
+    .property-hover { white-space: normal; max-width: 290px; }
+    .popup h3 { margin: 0 0 6px; color: #243b53; font-size: 14px; }
+    .popup table { border-collapse: collapse; font-size: 12px; }
+    .popup td { padding: 2px 6px 2px 0; vertical-align: top; }
+    .popup td:first-child { font-weight: 700; color: #52606d; white-space: nowrap; }
+    .property-marker { background: transparent; border: 0; }
+    .property-marker span {
+      display: block; width: 13px; height: 13px; transform: rotate(45deg);
+      border: 1.5px solid white; box-shadow: 0 0 2px rgba(0,0,0,.8);
     }
-    .layer-item:hover { background: #f8f9fa; }
-    .layer-item input[type="checkbox"] { margin-right: 7px; cursor: pointer; flex-shrink: 0; }
-
-    .swatch {
-      width: 13px;
-      height: 13px;
-      border-radius: 2px;
-      margin-right: 6px;
-      border: 1px solid rgba(0,0,0,0.25);
-      flex-shrink: 0;
+    #errors { display: none; padding: 7px 10px; background: #fff3cd; color: #664d03; font-size: 11px; }
+    @media (max-width: 650px) {
+      #panel { width: min(290px, calc(100vw - 20px)); max-height: 60vh; }
+      #panel.collapsed { width: 220px; }
+      #panel.collapsed #layers, #panel.collapsed #errors { display: none; }
     }
-    .swatch-circle { border-radius: 50%; }
-
-    .collapsed .group-content { display: none; }
-    .arrow { font-size: 10px; }
-    .property-hover { white-space: normal; max-width: 280px; }
   </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="panel">
-  <div id="panel-header">ChargeReady Market Map</div>
-  <div id="layer-control"></div>
-</div>
+  <div id="loading">Loading the QGIS field map…</div>
+  <div id="map"></div>
+  <aside id="panel">
+    <div id="panel-title"><span>ChargeReady Market Map</span><button id="collapse" aria-label="Collapse layers">▲</button></div>
+    <div id="errors"></div>
+    <div id="layers"></div>
+  </aside>
 
-<script>
-const map = L.map('map', { center: [40.0, -89.2], zoom: 7 });
+  <script>
+    const map = L.map('map', { center: [40.0, -89.2], zoom: 7, preferCanvas: false });
 
-// Satellite basemap (ESRI) + label overlay
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles © Esri',
-  maxZoom: 19
-}).addTo(map);
+    const baseLayers = {
+      google: L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 18, attribution: 'Imagery © Google'
+      }),
+      twoGis: L.tileLayer('https://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1.1', {
+        maxZoom: 18, attribution: '© 2GIS'
+      })
+    };
+    baseLayers.google.addTo(map);
 
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 19,
-  opacity: 0.8
-}).addTo(map);
-
-// ── Color configs (keys must match actual data values) ─────
-
-const PRIORITY_COLORS = {
-  '1 - T1 Hot':     '#d73027',
-  '2 - T1 Warm':    '#f46d43',
-  '3 - T1 Cold':    '#4575b4',
-  '4 - T2 Hot':     '#e0a800',
-  '5 - T1 Ice':     '#74c2e1',
-  '6 - T2 Monitor': '#aaaaaa',
-};
-
-const PRIORITY_LABELS = {
-  '1 - T1 Hot':     'P1 – T1 Hot',
-  '2 - T1 Warm':    'P2 – T1 Warm',
-  '3 - T1 Cold':    'P3 – T1 Cold',
-  '4 - T2 Hot':     'P4 – T2 Hot',
-  '5 - T1 Ice':     'P5 – T1 Ice',
-  '6 - T2 Monitor': 'P6 – T2 Monitor',
-};
-
-const EV_COLORS = {
-  '1 - Very High (300+)':  '#4a0078',
-  '2 - High (100-299)':    '#7b2d8b',
-  '3 - Moderate (25-99)':  '#b05ba6',
-  '4 - Low (10-24)':       '#d4a0c7',
-  '5 - Very Low (<10)':    '#e8cfe8',
-};
-
-const EV_LABELS = {
-  '1 - Very High (300+)':  'Very High (300+)',
-  '2 - High (100-299)':    'High (100–299)',
-  '3 - Moderate (25-99)':  'Moderate (25–99)',
-  '4 - Low (10-24)':       'Low (10–24)',
-  '5 - Very Low (<10)':    'Very Low (<10)',
-};
-
-const SF_COLORS = {
-  '1 - Low (<500)':         '#ffffcc',
-  '2 - Medium (500-2,000)': '#a1dab4',
-  '3 - High (2,000-5,000)': '#41b6c4',
-  '4 - Very High (5,000+)': '#225ea8',
-};
-
-const SF_LABELS = {
-  '1 - Low (<500)':         'Low (<500 units)',
-  '2 - Medium (500-2,000)': 'Medium (500–2,000)',
-  '3 - High (2,000-5,000)': 'High (2,000–5,000)',
-  '4 - Very High (5,000+)': 'Very High (5,000+)',
-};
-
-// MF tiers — match on startsWith since values have long descriptions
-const MF_TIERS = [
-  { key: 'mf_T1', label: 'Tier 1 – EIEC',     prefix: 'T1', color: '#e74c3c' },
-  { key: 'mf_T2', label: 'Tier 2 – Non-EIEC',  prefix: 'T2', color: '#3498db' },
-];
-
-// ── Layer storage ──────────────────────────────────────────
-const layers = {};
-
-// ── Build control panel ────────────────────────────────────
-function buildControl(groups) {
-  const ctrl = document.getElementById('layer-control');
-  groups.forEach(group => {
-    const groupDiv = document.createElement('div');
-    groupDiv.className = 'group';
-
-    const header = document.createElement('div');
-    header.className = 'group-header';
-    header.innerHTML = `<span>${group.name}</span><span class="arrow">▼</span>`;
-    header.onclick = () => {
-      groupDiv.classList.toggle('collapsed');
-      header.querySelector('.arrow').textContent =
-        groupDiv.classList.contains('collapsed') ? '▶' : '▼';
+    const COMPOSITE = {
+      '1 - T1 Hot':'#f2f212', '2 - T1 Warm':'#e585ad', '3 - T1 Cold':'#18db39',
+      '4 - T2 Hot':'#d17127', '5 - T1 Ice':'#be75d8', '6 - T2 Monitor':'#38c9cb'
+    };
+    const EV_COUNTS = {
+      '1 - Very High (300+)':'#12ff00', '2 - High (100-299)':'#76eddf',
+      '3 - Moderate (25-99)':'#9a1ddd', '4 - Low (10-24)':'#4982ec',
+      '5 - Very Low (<10)':'#4ddcaa'
+    };
+    const SF_HOUSING = {
+      '1 - Low (<500)':'#688bd0', '2 - Medium (500-2,000)':'#db7de9',
+      '3 - High (2,000-5,000)':'#5ed394', '4 - Very High (5,000+)':'#fa0000'
+    };
+    const EV_SCORE = {
+      'T1|Hot':'#0000ff', 'T1|Warm':'#f5a623', 'T1|Cold':'#fad9b0',
+      'T2|Hot':'#e1f402', 'T2|Warm':'#d5b43c', 'T2|Cold':'#729b6f'
+    };
+    const PROPERTY = {
+      'Apartment Complex':'#1c1ae3', 'Mobile Home / MHC':'#f2f212',
+      'Senior Living':'#44ca7e', 'Other':'#e2dd76'
     };
 
-    const content = document.createElement('div');
-    content.className = 'group-content';
+    const layers = {};
+    const controls = {};
+    let failures = 0;
 
-    group.items.forEach(item => {
-      const row = document.createElement('div');
-      row.className = 'layer-item';
+    const definitions = [
+      { section:'QGIS Layers', key:'mf', name:'Multifamily Complexes', file:'mf_prospects.geojson', on:true, pane:610,
+        legend:Object.entries(PROPERTY), kind:'points' },
+      { key:'sf', name:'Single Family Housing Density', file:'sf_housing.geojson', on:false, pane:520,
+        legend:Object.entries(SF_HOUSING), kind:'sf' },
+      { key:'evCounts', name:'Straight EV_Counts', file:'ev_counts.geojson', on:false, pane:510,
+        legend:Object.entries(EV_COUNTS), kind:'evCounts' },
+      { key:'composite', name:'Composite Priority Map', file:'zip_priority.geojson', on:false, pane:500,
+        legend:Object.entries(COMPOSITE), kind:'composite' },
+      { section:'EJC, CEJA, R3, Income', key:'ejc', name:'EJC_2026', file:'ejc.geojson', on:false, pane:470,
+        legend:[['EJC_2026','#e31a1c','hatch-red']], kind:'ejc' },
+      { key:'ceja', name:'CEJA_Adjacent', file:'ceja.geojson', on:false, pane:460,
+        legend:[['CEJA_Adjacent','#0bfc5f','hatch-green']], kind:'ceja' },
+      { key:'lmi', name:'Income Qualifying Areas', file:'lmi.geojson', on:false, pane:450,
+        legend:[['Income Qualifying Areas','#d77a90']], kind:'lmi' },
+      { key:'r3', name:'R3_Designated_Only', file:'r3.geojson', on:false, pane:440,
+        legend:[['R3_Designated_Only','#0912ff']], kind:'r3' },
+      { section:'Supporting Layers', key:'evScore', name:'EV Score- Demand + Trend', file:'zip_priority.geojson', on:false, pane:410,
+        legend:[['T1 EIEC – Hot','#0000ff','hatch-blue'],['T1 EIEC – Warm','#f5a623'],['T1 EIEC – Cold','#fad9b0'],['T2 Non-EIEC – Hot','#e1f402'],['T2 Non-EIEC – Warm','#d5b43c'],['T2 Non-EIEC – Cold','#729b6f']], kind:'evScore' },
+      { key:'nonEiec', name:'Non EIEC Area', file:'non_eiec.geojson', on:false, pane:400,
+        legend:[['Non EIEC Area','#e31a1c']], kind:'nonEiec' },
+      { key:'ameren', name:'Ameren_Territory — ameren_territory', file:'ameren_territory.geojson', on:false, pane:390,
+        legend:[['Ameren Territory','#e31a1c']], kind:'ameren' },
+      { key:'il', name:'IL_Boundary — tl_2025_us_state', file:'il_boundary.geojson', on:true, pane:380,
+        legend:[['Illinois boundary','transparent']], kind:'il' }
+    ];
 
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = item.defaultOn;
-      cb.id = item.key;
-
-      const swatch = document.createElement('div');
-      swatch.className = 'swatch' + (item.circle ? ' swatch-circle' : '');
-      swatch.style.background = item.color;
-
-      const label = document.createElement('label');
-      label.htmlFor = item.key;
-      label.textContent = item.label;
-      label.style.cursor = 'pointer';
-
-      cb.onchange = () => {
-        if (layers[item.key]) {
-          cb.checked ? map.addLayer(layers[item.key]) : map.removeLayer(layers[item.key]);
-        }
-      };
-
-      row.appendChild(cb); row.appendChild(swatch); row.appendChild(label);
-      content.appendChild(row);
+    definitions.forEach(def => {
+      map.createPane(def.key);
+      map.getPane(def.key).style.zIndex = def.pane;
     });
 
-    groupDiv.appendChild(header);
-    groupDiv.appendChild(content);
-    ctrl.appendChild(groupDiv);
-  });
-}
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    }
+    function show(value) { return value === null || value === undefined || value === '' ? '—' : escapeHtml(value); }
+    function number(value) { return value === null || value === undefined ? '—' : Number(value).toLocaleString(); }
+    function tablePopup(title, rows) {
+      return `<div class="popup"><h3>${escapeHtml(title)}</h3><table>${rows.map(([a,b]) => `<tr><td>${escapeHtml(a)}</td><td>${b}</td></tr>`).join('')}</table></div>`;
+    }
+    function zipPopup(p) {
+      return tablePopup(`ZIP ${show(p.ZIP)}`, [
+        ['Priority',show(p.PRIORITY_CLASS)], ['Tier',show(p.PROGRAM_TIER)], ['Activity',show(p.ACTIVITY)],
+        ['EV total',number(p.EV_TOTAL)], ['Composite score',show(p.COMBINED_SCORE)], ['SF units',number(p.SF_HU)],
+        ['EJC',p.IS_EJC ? 'Yes' : 'No'], ['CEJA',p.IS_CEJA ? 'Yes' : 'No'], ['LMI',p.IS_LMI ? 'Yes' : 'No']
+      ]);
+    }
+    function propertyPopup(p) {
+      const website = p.WEBSITE ? `<a href="${escapeHtml(p.WEBSITE)}" target="_blank" rel="noopener">Open website</a>` : '—';
+      return tablePopup(show(p.PROPERTY_NAME || 'Property'), [
+        ['Type',show(p.PROPERTY_TYPE)], ['Address',show(p.ADDRESS)], ['City',show(p.CITY)], ['ZIP',show(p.ZIP)],
+        ['Tier',show(p.TIER)], ['Activity',show(p.ACTIVITY)], ['Phone',show(p.PHONE)], ['Website',website]
+      ]);
+    }
+    function simplePopup(title, p) {
+      const rows = Object.entries(p).slice(0, 8).map(([key,value]) => [key,show(value)]);
+      return tablePopup(title, rows);
+    }
 
-const groupDefs = [
-  {
-    name: 'ZIP Priority Groups',
-    items: Object.keys(PRIORITY_COLORS).map(cls => ({
-      key: 'priority_' + cls.replace(/[\s\-]+/g, '_'),
-      label: PRIORITY_LABELS[cls],
-      color: PRIORITY_COLORS[cls],
-      defaultOn: ['1 - T1 Hot','2 - T1 Warm','3 - T1 Cold','4 - T2 Hot'].includes(cls),
-    }))
-  },
-  {
-    name: 'EV Counts',
-    items: Object.keys(EV_COLORS).map(cls => ({
-      key: 'ev_' + cls.replace(/[\s\-()]+/g, '_'),
-      label: EV_LABELS[cls],
-      color: EV_COLORS[cls],
-      defaultOn: false,
-    }))
-  },
-  {
-    name: 'SF Housing Density',
-    items: Object.keys(SF_COLORS).map(cls => ({
-      key: 'sf_' + cls.replace(/[\s\-,()]+/g, '_'),
-      label: SF_LABELS[cls],
-      color: SF_COLORS[cls],
-      defaultOn: false,
-    }))
-  },
-  {
-    name: 'Multifamily Prospects',
-    items: MF_TIERS.map(t => ({
-      key: t.key,
-      label: t.label,
-      color: t.color,
-      circle: true,
-      defaultOn: true,
-    }))
-  },
-  {
-    name: 'Eligibility Areas',
-    items: [
-      { key: 'ejc',  label: 'EJC 2026',      color: '#e74c3c', defaultOn: false },
-      { key: 'ceja', label: 'CEJA Adjacent',  color: '#e67e22', defaultOn: false },
-      { key: 'r3',   label: 'R3 Designated',  color: '#8e44ad', defaultOn: false },
-      { key: 'lmi',  label: 'LMI (51%+)',     color: '#27ae60', defaultOn: false },
-      { key: 'non_eiec', label: 'Non EIEC Area', color: '#3498db', defaultOn: false },
-    ]
-  },
-];
-
-buildControl(groupDefs);
-
-// ── Helpers ────────────────────────────────────────────────
-function polyStyle(color, fillOpacity) {
-  return { color, weight: 0.5, opacity: 0.8, fillColor: color, fillOpacity: fillOpacity || 0.5 };
-}
-
-function addLayer(key, lyr) {
-  layers[key] = lyr;
-  const cb = document.getElementById(key);
-  if (cb && cb.checked) lyr.addTo(map);
-}
-
-// ── ZIP Priority ───────────────────────────────────────────
-fetch('zip_priority.geojson').then(r => r.json()).then(data => {
-  Object.keys(PRIORITY_COLORS).forEach(cls => {
-    const key = 'priority_' + cls.replace(/[\s\-]+/g, '_');
-    const features = data.features.filter(f => f.properties.PRIORITY_CLASS === cls);
-    addLayer(key, L.geoJSON({ type: 'FeatureCollection', features }, {
-      style: polyStyle(PRIORITY_COLORS[cls]),
-      onEachFeature: (f, l) => {
-        const p = f.properties;
-        l.bindPopup(`<b>ZIP ${p.ZIP}</b><br>
-          Priority: <b>${p.PRIORITY_CLASS}</b><br>
-          Score: ${p.COMPOSITE_SCORE}<br>
-          EJC: ${p.IS_EJC} &nbsp;|&nbsp; CEJA: ${p.IS_CEJA}<br>
-          R3: ${p.IS_R3} &nbsp;|&nbsp; LMI: ${p.IS_LMI}`);
+    function polygonStyle(def, p) {
+      const base = { pane:def.key, weight:.8, color:'#232323', fillOpacity:.4 };
+      if (def.kind === 'sf') return {...base, fillColor:SF_HOUSING[p.SF_CLASS] || '#beb297', fillOpacity:.5};
+      if (def.kind === 'evCounts') return {...base, fillColor:EV_COUNTS[p.EV_CLASS] || '#beb297', fillOpacity:.4};
+      if (def.kind === 'composite') return {...base, fillColor:COMPOSITE[p.PRIORITY_CLASS] || '#85b66f', fillOpacity:.4};
+      if (def.kind === 'ejc') return {...base, color:'#e31a1c', weight:1.5, dashArray:'7 5', fillOpacity:0};
+      if (def.kind === 'ceja') return {...base, color:'#0bfc5f', weight:1.5, dashArray:'7 5', fillOpacity:0};
+      if (def.kind === 'lmi') return {...base, color:'#000', weight:.7, fillColor:'#d77a90', fillOpacity:.59};
+      if (def.kind === 'r3') return {...base, color:'#232323', weight:1.2, fillColor:'#0912ff', fillOpacity:.397};
+      if (def.kind === 'evScore') {
+        const tier = String(p.PROGRAM_TIER || '').startsWith('T1') ? 'T1' : 'T2';
+        return {...base, color:'#fff', weight:1.3, fillColor:EV_SCORE[`${tier}|${p.ACTIVITY}`] || '#729b6f', fillOpacity:.423};
       }
-    }));
-  });
-});
+      if (def.kind === 'nonEiec') return {...base, color:'#fff', weight:2.5, fillColor:'#e31a1c', fillOpacity:1};
+      if (def.kind === 'ameren') return {...base, color:'#232323', weight:1, fillColor:'#e31a1c', fillOpacity:1};
+      if (def.kind === 'il') return {...base, color:'#fff', weight:2, fillOpacity:0};
+      return base;
+    }
 
-// ── EV Counts ──────────────────────────────────────────────
-fetch('ev_counts.geojson').then(r => r.json()).then(data => {
-  Object.keys(EV_COLORS).forEach(cls => {
-    const key = 'ev_' + cls.replace(/[\s\-()]+/g, '_');
-    const features = data.features.filter(f => f.properties.EV_CLASS === cls);
-    addLayer(key, L.geoJSON({ type: 'FeatureCollection', features }, {
-      style: polyStyle(EV_COLORS[cls]),
-      onEachFeature: (f, l) => {
-        const p = f.properties;
-        l.bindPopup(`<b>ZIP ${p.ZIP}</b><br>
-          EV Class: <b>${p.EV_CLASS}</b><br>
-          Total EVs: ${p.EV_TOTAL}<br>
-          Added last 12mo: ${p.ADDED_LAST_12MO}`);
-      }
-    }));
-  });
-});
-
-// ── SF Housing ─────────────────────────────────────────────
-fetch('sf_housing.geojson').then(r => r.json()).then(data => {
-  Object.keys(SF_COLORS).forEach(cls => {
-    const key = 'sf_' + cls.replace(/[\s\-,()]+/g, '_');
-    const features = data.features.filter(f => f.properties.SF_CLASS === cls);
-    addLayer(key, L.geoJSON({ type: 'FeatureCollection', features }, {
-      style: polyStyle(SF_COLORS[cls], 0.45),
-      onEachFeature: (f, l) => {
-        const p = f.properties;
-        l.bindPopup(`<b>ZIP ${p.ZIP}</b><br>
-          SF Class: <b>${p.SF_CLASS}</b><br>
-          SF Units: ${p.SF_HU ? Number(p.SF_HU).toLocaleString() : 'N/A'}`);
-      }
-    }));
-  });
-});
-
-// ── MF Prospects ───────────────────────────────────────────
-fetch('mf_prospects.geojson').then(r => r.json()).then(data => {
-  MF_TIERS.forEach(tier => {
-    const features = data.features.filter(f =>
-      f.properties.TIER && f.properties.TIER.startsWith(tier.prefix));
-    addLayer(tier.key, L.geoJSON({ type: 'FeatureCollection', features }, {
-      pointToLayer: (f, latlng) => L.circleMarker(latlng, {
-        radius: 6,
-        fillColor: tier.color,
-        color: '#fff',
-        weight: 1,
-        opacity: 1,
-        fillOpacity: 0.85,
-      }),
-      onEachFeature: (f, l) => {
-        const p = f.properties;
-        l.bindPopup(`<b>${p.PROPERTY_NAME}</b><br>
-          ${p.ADDRESS}, ${p.CITY}<br>
-          ZIP: ${p.ZIP}<br>
-          ${p.TIER}<br>
-          ${p.PHONE ? 'Ph: ' + p.PHONE + '<br>' : ''}
-          ${p.WEBSITE ? '<a href="' + p.WEBSITE + '" target="_blank">Website</a>' : ''}`);
-        l.bindTooltip(l.getPopup().getContent(), {
-          sticky: true,
-          direction: 'top',
-          opacity: 0.95,
-          className: 'property-hover'
+    function createLayer(def, data) {
+      if (def.kind === 'points') {
+        return L.geoJSON(data, {
+          pane:def.key,
+          pointToLayer:(feature, latlng) => {
+            const type = feature.properties.PROPERTY_TYPE || 'Other';
+            const color = PROPERTY[type] || PROPERTY.Other;
+            return L.marker(latlng, { pane:def.key, icon:L.divIcon({
+              className:'property-marker', html:`<span style="background:${color}"></span>`, iconSize:[16,16], iconAnchor:[8,8]
+            })});
+          },
+          onEachFeature:(feature, layer) => {
+            const content = propertyPopup(feature.properties);
+            layer.bindPopup(content, { maxWidth:310 });
+            layer.bindTooltip(content, { sticky:true, direction:'top', opacity:.96, className:'property-hover' });
+            layer.on('popupopen', () => layer.closeTooltip());
+          }
         });
-        l.on('popupopen', () => l.closeTooltip());
       }
-    }));
-  });
-});
+      return L.geoJSON(data, {
+        pane:def.key,
+        style:feature => polygonStyle(def, feature.properties),
+        onEachFeature:(feature, layer) => {
+          const p = feature.properties;
+          const content = ['sf','evCounts','composite','evScore'].includes(def.kind)
+            ? zipPopup(p) : simplePopup(def.name, p);
+          layer.bindPopup(content, { maxWidth:310 });
+        }
+      });
+    }
 
-// ── Eligibility Areas ──────────────────────────────────────
-// Keep the territory remainder below the existing thematic layers.
-map.createPane('nonEiecPane');
-map.getPane('nonEiecPane').style.zIndex = 350;
-fetch('non_eiec.geojson').then(r => {
-  if (!r.ok) throw new Error('Non EIEC Area could not be loaded');
-  return r.json();
-}).then(data => {
-  addLayer('non_eiec', L.geoJSON(data, {
-    pane: 'nonEiecPane',
-    style: polyStyle('#3498db', 0.35),
-    onEachFeature: (f, l) => l.bindPopup('<b>Non EIEC Area</b><br>Ameren territory outside the EJC, CEJA Adjacent, R3, and income-qualifying areas.')
-  }));
-}).catch(error => {
-  console.error(error);
-  const checkbox = document.getElementById('non_eiec');
-  checkbox.disabled = true;
-  document.querySelector('label[for="non_eiec"]').textContent = 'Non EIEC Area (unavailable)';
-});
+    let activeSectionBody = null;
+    function addSection(title, open = false) {
+      const button = document.createElement('button');
+      button.className = 'section-title';
+      const text = document.createElement('span'); text.textContent = title;
+      const arrow = document.createElement('span'); arrow.textContent = open ? '▼' : '▶';
+      button.append(text, arrow);
+      const body = document.createElement('div');
+      body.className = `section-body${open ? '' : ' collapsed'}`;
+      button.onclick = () => {
+        body.classList.toggle('collapsed');
+        arrow.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+      };
+      document.getElementById('layers').append(button, body);
+      activeSectionBody = body;
+    }
+    function addLayerControl(def) {
+      if (def.section) addSection(def.section);
+      const wrap = document.createElement('div');
+      wrap.className = 'layer';
+      const row = document.createElement('div');
+      row.className = 'layer-row';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox'; checkbox.id = `check-${def.key}`; checkbox.checked = def.on; checkbox.disabled = true;
+      const label = document.createElement('label');
+      label.htmlFor = checkbox.id; label.textContent = def.name;
+      const toggle = document.createElement('button');
+      toggle.className = 'legend-toggle'; toggle.textContent = '▶'; toggle.title = 'Show legend';
+      const legend = document.createElement('div');
+      legend.className = 'legend';
+      def.legend.forEach(([name,color,pattern]) => {
+        const item = document.createElement('div'); item.className = 'legend-item';
+        const swatch = document.createElement('span');
+        swatch.className = `swatch${def.kind === 'points' ? ' diamond' : ''}${pattern ? ` ${pattern}` : ''}`;
+        if (!pattern) swatch.style.background = color;
+        item.append(swatch, document.createTextNode(name)); legend.appendChild(item);
+      });
+      toggle.onclick = () => { legend.classList.toggle('open'); toggle.textContent = legend.classList.contains('open') ? '▼' : '▶'; };
+      checkbox.onchange = () => {
+        if (!layers[def.key]) return;
+        checkbox.checked ? layers[def.key].addTo(map) : map.removeLayer(layers[def.key]);
+      };
+      row.append(checkbox,label,toggle); wrap.append(row,legend); activeSectionBody.appendChild(wrap);
+      controls[def.key] = checkbox;
+    }
 
-[
-  { key: 'ejc',  file: 'ejc.geojson',  color: '#e74c3c',
-    popup: p => `<b>EJC 2026</b><br>GEOID: ${p.GEOID}<br>County: ${p.County}` },
-  { key: 'ceja', file: 'ceja.geojson', color: '#e67e22',
-    popup: p => `<b>CEJA Adjacent</b><br>GEOID: ${p.GEOID}<br>County: ${p.County}` },
-  { key: 'r3',   file: 'r3.geojson',   color: '#8e44ad',
-    popup: p => `<b>R3 Designated</b><br>GEOID: ${p.GEOID}` },
-  { key: 'lmi',  file: 'lmi.geojson',  color: '#27ae60',
-    popup: p => `<b>LMI Qualifying</b><br>GEOID: ${p.GEOID}<br>LowMod: ${p.LOWMOD_PCT !== null ? (p.LOWMOD_PCT * 100).toFixed(1) + '%' : 'N/A'}` },
-].forEach(def => {
-  fetch(def.file).then(r => r.json()).then(data => {
-    addLayer(def.key, L.geoJSON(data, {
-      style: polyStyle(def.color, 0.35),
-      onEachFeature: (f, l) => l.bindPopup(def.popup(f.properties))
-    }));
-  });
-});
-</script>
+    definitions.forEach(addLayerControl);
+    addSection('Basemaps');
+    ['google','twoGis'].forEach((key,index) => {
+      const row = document.createElement('div'); row.className = 'layer-row';
+      const radio = document.createElement('input'); radio.type='radio'; radio.name='basemap'; radio.id=`base-${key}`; radio.checked=index===0;
+      const label = document.createElement('label'); label.htmlFor=radio.id; label.textContent=key==='google' ? 'Google Hybrid' : '2gis Map';
+      radio.onchange=()=>{ Object.values(baseLayers).forEach(layer=>map.removeLayer(layer)); baseLayers[key].addTo(map); };
+      row.append(radio,label); activeSectionBody.appendChild(row);
+    });
+
+    document.getElementById('collapse').onclick = () => {
+      const panel = document.getElementById('panel'); panel.classList.toggle('collapsed');
+      document.getElementById('collapse').textContent = panel.classList.contains('collapsed') ? '▼' : '▲';
+    };
+
+    Promise.allSettled(definitions.map(async def => {
+      const response = await fetch(def.file);
+      if (!response.ok) throw new Error(`${def.name}: ${response.status}`);
+      const data = await response.json();
+      layers[def.key] = createLayer(def, data);
+      controls[def.key].disabled = false;
+      if (def.on) layers[def.key].addTo(map);
+    })).then(results => {
+      const errors = results.filter(result => result.status === 'rejected');
+      failures = errors.length;
+      if (failures) {
+        const box = document.getElementById('errors'); box.style.display='block';
+        box.textContent = `${failures} layer${failures === 1 ? '' : 's'} could not be loaded.`;
+        errors.forEach(error => console.error(error.reason));
+      }
+      document.getElementById('loading').style.display='none';
+    });
+  </script>
 </body>
 </html>
