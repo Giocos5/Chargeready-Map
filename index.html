@@ -58,6 +58,11 @@
       display: block; width: 13px; height: 13px; transform: rotate(45deg);
       border: 1.5px solid white; box-shadow: 0 0 2px rgba(0,0,0,.8);
     }
+    .unit-marker { background: transparent; border: 0; }
+    .unit-marker span {
+      display: block; width: 100%; height: 100%; border-radius: 50%;
+      border: 1.5px solid white; box-shadow: 0 0 3px rgba(0,0,0,.85);
+    }
     #errors { display: none; padding: 7px 10px; background: #fff3cd; color: #664d03; font-size: 11px; }
     @media (max-width: 650px) {
       #panel { width: min(290px, calc(100vw - 20px)); max-height: 60vh; }
@@ -76,7 +81,7 @@
   </aside>
 
   <script>
-    const map = L.map('map', { center: [40.0, -89.2], zoom: 7, preferCanvas: false });
+    const map = L.map('map', { center: [40.1164, -88.2434], zoom: 11, preferCanvas: false });
 
     const baseLayers = {
       google: L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
@@ -109,20 +114,49 @@
       'Apartment Complex':'#1c1ae3', 'Mobile Home / MHC':'#f2f212',
       'Senior Living':'#44ca7e', 'Other':'#e2dd76'
     };
+    const UNIT_CLASSES = [
+      ['units250','250+ units/sites','#d73027'],
+      ['units150','150–249 units/sites','#f28e2b'],
+      ['units75','75–149 units/sites','#f2cf33'],
+      ['unitsUnder75','Under 75 units/sites','#36a657'],
+      ['unitsVerify','Count needs verification','#7f8c8d']
+    ];
+    const PROPERTY_CLASSES = Object.entries(PROPERTY).filter(([name]) => name !== 'Other');
+    const SF_CLASSES = Object.entries(SF_HOUSING);
+    const EV_COUNT_CLASSES = Object.entries(EV_COUNTS);
+    const PRIORITY_CLASSES = Object.entries(COMPOSITE);
+
+    function classDefinitions({ section, prefix, file, kind, classes, property, pane, on = false }) {
+      return classes.map(([value,color], index) => ({
+        section:index === 0 ? section : undefined,
+        key:`${prefix}${index + 1}`, name:value.replace(/^\d+\s*-\s*/, ''), file, kind,
+        filterProperty:property, filterValue:value, color, on, pane:pane-index,
+        legend:[[value,color]]
+      }));
+    }
 
     const layers = {};
     const controls = {};
     let failures = 0;
 
     const definitions = [
-      { section:'QGIS Layers', key:'mf', name:'Multifamily Complexes', file:'mf_prospects.geojson', on:true, pane:610,
-        legend:Object.entries(PROPERTY), kind:'points' },
-      { key:'sf', name:'Single Family Housing Density', file:'sf_housing.geojson', on:false, pane:520,
-        legend:Object.entries(SF_HOUSING), kind:'sf' },
-      { key:'evCounts', name:'Straight EV_Counts', file:'ev_counts.geojson', on:false, pane:510,
-        legend:Object.entries(EV_COUNTS), kind:'evCounts' },
-      { key:'composite', name:'Composite Priority Map', file:'zip_priority.geojson', on:false, pane:500,
-        legend:Object.entries(COMPOSITE), kind:'composite' },
+      ...UNIT_CLASSES.map(([key,name,color], index) => ({
+        section:index === 0 ? 'Properties by Unit Count — Champaign–Urbana' : undefined,
+        key, name, color, sizeClass:name, file:'unit_count_properties.geojson', on:true,
+        pane:660-index, legend:[[name,color]], kind:'unitPoints'
+      })),
+      ...classDefinitions({ section:'Multifamily Complexes — Property Types', prefix:'mfType',
+        file:'mf_prospects.geojson', kind:'points', classes:PROPERTY_CLASSES,
+        property:'PROPERTY_TYPE', pane:630 }),
+      ...classDefinitions({ section:'Single Family Housing Density', prefix:'sfClass',
+        file:'sf_housing.geojson', kind:'sf', classes:SF_CLASSES,
+        property:'SF_CLASS', pane:590 }),
+      ...classDefinitions({ section:'Straight EV Counts', prefix:'evCountClass',
+        file:'ev_counts.geojson', kind:'evCounts', classes:EV_COUNT_CLASSES,
+        property:'EV_CLASS', pane:580 }),
+      ...classDefinitions({ section:'Composite Priority Map', prefix:'priorityClass',
+        file:'zip_priority.geojson', kind:'composite', classes:PRIORITY_CLASSES,
+        property:'PRIORITY_CLASS', pane:570 }),
       { section:'EJC, CEJA, R3, Income', key:'ejc', name:'EJC_2026', file:'ejc.geojson', on:false, pane:470,
         legend:[['EJC_2026','#e31a1c','hatch-red']], kind:'ejc' },
       { key:'ceja', name:'CEJA_Adjacent', file:'ceja.geojson', on:false, pane:460,
@@ -131,9 +165,12 @@
         legend:[['Income Qualifying Areas','#d77a90']], kind:'lmi' },
       { key:'r3', name:'R3_Designated_Only', file:'r3.geojson', on:false, pane:440,
         legend:[['R3_Designated_Only','#0912ff']], kind:'r3' },
-      { section:'Supporting Layers', key:'evScore', name:'EV Score- Demand + Trend', file:'zip_priority.geojson', on:false, pane:410,
-        legend:[['T1 EIEC – Hot','#0000ff','hatch-blue'],['T1 EIEC – Warm','#f5a623'],['T1 EIEC – Cold','#fad9b0'],['T2 Non-EIEC – Hot','#e1f402'],['T2 Non-EIEC – Warm','#d5b43c'],['T2 Non-EIEC – Cold','#729b6f']], kind:'evScore' },
-      { key:'nonEiec', name:'Non EIEC Area', file:'non_eiec.geojson', on:false, pane:400,
+      ...classDefinitions({ section:'EV Score — Demand + Trend', prefix:'evScoreClass',
+        file:'zip_priority.geojson', kind:'evScore', classes:[
+          ['1 - T1 Hot','#0000ff'], ['2 - T1 Warm','#f5a623'], ['3 - T1 Cold','#fad9b0'],
+          ['4 - T2 Hot','#e1f402'], ['5 - T1 Ice','#d5b43c'], ['6 - T2 Monitor','#729b6f']
+        ], property:'PRIORITY_CLASS', pane:430 }),
+      { section:'Supporting Layers', key:'nonEiec', name:'Non EIEC Area', file:'non_eiec.geojson', on:false, pane:400,
         legend:[['Non EIEC Area','#e31a1c']], kind:'nonEiec' },
       { key:'ameren', name:'Ameren_Territory — ameren_territory', file:'ameren_territory.geojson', on:false, pane:390,
         legend:[['Ameren Territory','#e31a1c']], kind:'ameren' },
@@ -168,6 +205,15 @@
         ['Tier',show(p.TIER)], ['Activity',show(p.ACTIVITY)], ['Phone',show(p.PHONE)], ['Website',website]
       ]);
     }
+    function unitPropertyPopup(p) {
+      const website = p.WEBSITE ? `<a href="${escapeHtml(p.WEBSITE)}" target="_blank" rel="noopener">Open website</a>` : '—';
+      return tablePopup(show(p.PROPERTY_NAME || 'Property'), [
+        ['Verified address',show(p.VERIFIED_ADDRESS)], ['Type',show(p.PROPERTY_TYPE)],
+        ['Units / sites',number(p.UNIT_COUNT)], ['Count basis',show(p.COUNT_BASIS)],
+        ['Size class',show(p.SIZE_CLASS)], ['Confidence',show(p.CONFIDENCE)],
+        ['Phone',show(p.PHONE)], ['Website',website]
+      ]);
+    }
     function simplePopup(title, p) {
       const rows = Object.entries(p).slice(0, 8).map(([key,value]) => [key,show(value)]);
       return tablePopup(title, rows);
@@ -182,23 +228,47 @@
       if (def.kind === 'ceja') return {...base, color:'#0bfc5f', weight:1.5, dashArray:'7 5', fillOpacity:0};
       if (def.kind === 'lmi') return {...base, color:'#000', weight:.7, fillColor:'#d77a90', fillOpacity:.59};
       if (def.kind === 'r3') return {...base, color:'#232323', weight:1.2, fillColor:'#0912ff', fillOpacity:.397};
-      if (def.kind === 'evScore') {
-        const tier = String(p.PROGRAM_TIER || '').startsWith('T1') ? 'T1' : 'T2';
-        return {...base, color:'#fff', weight:1.3, fillColor:EV_SCORE[`${tier}|${p.ACTIVITY}`] || '#729b6f', fillOpacity:.423};
-      }
-      if (def.kind === 'nonEiec') return {...base, color:'#fff', weight:2.5, fillColor:'#e31a1c', fillOpacity:1};
+      if (def.kind === 'evScore') return {...base, color:'#fff', weight:1.3, fillColor:def.color, fillOpacity:.423};
+      if (def.kind === 'nonEiec') return {...base, color:'#e31a1c', weight:1.2, fillColor:'#e31a1c', fillOpacity:.4};
       if (def.kind === 'ameren') return {...base, color:'#232323', weight:1, fillColor:'#e31a1c', fillOpacity:1};
       if (def.kind === 'il') return {...base, color:'#fff', weight:2, fillOpacity:0};
       return base;
     }
 
     function createLayer(def, data) {
+      if (def.kind === 'unitPoints') {
+        const filtered = {
+          type:'FeatureCollection',
+          features:data.features.filter(feature => feature.properties.SIZE_CLASS === def.sizeClass)
+        };
+        return L.geoJSON(filtered, {
+          pane:def.key,
+          pointToLayer:(feature, latlng) => {
+            const count = Number(feature.properties.UNIT_COUNT || 0);
+            const size = count >= 500 ? 22 : count >= 250 ? 19 : count >= 150 ? 17 : count >= 75 ? 15 : 13;
+            return L.marker(latlng, { pane:def.key, icon:L.divIcon({
+              className:'unit-marker', html:`<span style="background:${def.color}"></span>`,
+              iconSize:[size,size], iconAnchor:[size/2,size/2]
+            })});
+          },
+          onEachFeature:(feature, layer) => {
+            const content = unitPropertyPopup(feature.properties);
+            layer.bindPopup(content, { maxWidth:320 });
+            layer.bindTooltip(content, { sticky:true, direction:'top', opacity:.96, className:'property-hover' });
+            layer.on('popupopen', () => layer.closeTooltip());
+          }
+        });
+      }
+      const scopedData = def.filterProperty ? {
+        type:'FeatureCollection',
+        features:data.features.filter(feature => feature.properties[def.filterProperty] === def.filterValue)
+      } : data;
       if (def.kind === 'points') {
-        return L.geoJSON(data, {
+        return L.geoJSON(scopedData, {
           pane:def.key,
           pointToLayer:(feature, latlng) => {
             const type = feature.properties.PROPERTY_TYPE || 'Other';
-            const color = PROPERTY[type] || PROPERTY.Other;
+            const color = def.color || PROPERTY[type] || PROPERTY.Other;
             return L.marker(latlng, { pane:def.key, icon:L.divIcon({
               className:'property-marker', html:`<span style="background:${color}"></span>`, iconSize:[16,16], iconAnchor:[8,8]
             })});
@@ -211,7 +281,7 @@
           }
         });
       }
-      return L.geoJSON(data, {
+      return L.geoJSON(scopedData, {
         pane:def.key,
         style:feature => polygonStyle(def, feature.properties),
         onEachFeature:(feature, layer) => {
@@ -240,7 +310,7 @@
       activeSectionBody = body;
     }
     function addLayerControl(def) {
-      if (def.section) addSection(def.section);
+      if (def.section) addSection(def.section, def.kind === 'unitPoints');
       const wrap = document.createElement('div');
       wrap.className = 'layer';
       const row = document.createElement('div');
@@ -257,6 +327,7 @@
         const item = document.createElement('div'); item.className = 'legend-item';
         const swatch = document.createElement('span');
         swatch.className = `swatch${def.kind === 'points' ? ' diamond' : ''}${pattern ? ` ${pattern}` : ''}`;
+        if (def.kind === 'unitPoints') swatch.style.borderRadius = '50%';
         if (!pattern) swatch.style.background = color;
         item.append(swatch, document.createTextNode(name)); legend.appendChild(item);
       });
@@ -265,7 +336,17 @@
         if (!layers[def.key]) return;
         checkbox.checked ? layers[def.key].addTo(map) : map.removeLayer(layers[def.key]);
       };
-      row.append(checkbox,label,toggle); wrap.append(row,legend); activeSectionBody.appendChild(wrap);
+      if (def.legend.length === 1) {
+        const [,color,pattern] = def.legend[0];
+        const swatch = document.createElement('span');
+        swatch.className = `swatch${def.kind === 'points' ? ' diamond' : ''}${pattern ? ` ${pattern}` : ''}`;
+        if (def.kind === 'unitPoints') swatch.style.borderRadius = '50%';
+        if (!pattern) swatch.style.background = color;
+        row.append(checkbox,swatch,label); wrap.append(row);
+      } else {
+        row.append(checkbox,label,toggle); wrap.append(row,legend);
+      }
+      activeSectionBody.appendChild(wrap);
       controls[def.key] = checkbox;
     }
 
@@ -284,10 +365,19 @@
       document.getElementById('collapse').textContent = panel.classList.contains('collapsed') ? '▼' : '▲';
     };
 
+    const fileLoads = {};
+    function loadData(file) {
+      if (!fileLoads[file]) {
+        fileLoads[file] = fetch(file).then(response => {
+          if (!response.ok) throw new Error(`${file}: ${response.status}`);
+          return response.json();
+        });
+      }
+      return fileLoads[file];
+    }
+
     Promise.allSettled(definitions.map(async def => {
-      const response = await fetch(def.file);
-      if (!response.ok) throw new Error(`${def.name}: ${response.status}`);
-      const data = await response.json();
+      const data = await loadData(def.file);
       layers[def.key] = createLayer(def, data);
       controls[def.key].disabled = false;
       if (def.on) layers[def.key].addTo(map);
